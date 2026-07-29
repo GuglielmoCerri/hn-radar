@@ -34,7 +34,7 @@ jobs:
           # ---- Your settings: edit these directly ----
           HN_RADAR_INTERESTS: "AI,Python,3D"
           HN_RADAR_POINTS_THRESHOLD: "100"
-          HN_RADAR_SECTIONS: "story,show_hn,ask_hn"
+          HN_RADAR_SECTIONS: "story,show_hn"
           # ---- Optional ----
           # HN_RADAR_MATCH_FIELDS: "title,url,story_text"
           # HN_RADAR_POINTS_REQUIRE_INTEREST: "false"
