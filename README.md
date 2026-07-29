@@ -86,7 +86,7 @@ it defaults to `story,show_hn,ask_hn`, and interest matching searches the defaul
 
 ### 4. Add repository secrets
 
-In your GitHub repo → **Settings → Secrets and variables → Actions**, add:
+In your GitHub repo → **Settings → Secrets and variables → Actions → Secrets → New repository secret** add:
 
 | Secret | Value |
 | ------ | ----- |
@@ -98,6 +98,22 @@ Then enable Actions. The workflow (`.github/workflows/hn-radar.yml`) also has a
 
 > The workflow needs `contents: write` permission (already set) so it can commit
 > the updated state file.
+
+### 5. Enable Actions and run it
+
+The workflow file is already committed at `.github/workflows/hn-radar.yml`, so you just enable and trigger it:
+
+- In your repo, open the **Actions** tab.
+- In the left sidebar, click the **hn-radar** workflow.
+- Click **Run workflow** (top-right) → keep the branch as `main` → **Run workflow**.
+  This triggers the `workflow_dispatch` run immediately so you can test without
+  waiting for the schedule.
+- Click the run to watch the logs. On success you'll get a Telegram message (if any
+  posts matched) and the bot commits an updated `state/seen.json`.
+
+After that first manual run, it keeps running automatically on the cron schedule
+(every 15 minutes by default). To change the frequency, edit the `cron:` line at the
+top of `.github/workflows/hn-radar.yml`.
 
 ## Run locally
 
@@ -143,8 +159,19 @@ section, or in your shell for local runs).
 | `HN_RADAR_ALERT_NEW_MATCHING` | `true` | Enable new-post alerts. |
 | `HN_RADAR_ALERT_POINTS` | `true` | Enable points alerts. |
 | `HN_RADAR_POINTS_REQUIRE_INTEREST` | `false` | Points alerts must also match interests. |
+| `HN_RADAR_MAX_ALERTS_PER_RUN` | `25` | Max messages sent per run (`0` = unlimited). Prevents flooding. |
+| `HN_RADAR_SEND_INTERVAL` | `1.0` | Seconds between Telegram messages (rate-limit pacing). |
 
 Booleans accept `true/false`, `1/0`, `yes/no`, `on/off`.
+
+**Rate limiting & the first run:** Telegram limits bots to roughly one message per
+second per chat. hn-radar paces sends (`HN_RADAR_SEND_INTERVAL`) and automatically
+retries on HTTP 429 (honoring Telegram's `retry_after`). Because the very first run
+has no history, every recent matching/hot post qualifies at once, so a
+`HN_RADAR_MAX_ALERTS_PER_RUN` cap sends the newest posts first and lets any backlog
+trickle out over following runs instead of flooding your phone (and hitting 429).
+A post is only marked "seen" after it is delivered, so nothing is lost if a run stops
+early.
 
 **How the points variables interact:**
 
