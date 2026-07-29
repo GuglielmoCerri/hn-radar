@@ -1,0 +1,54 @@
+name: hn-radar
+
+on:
+  schedule:
+    # Every 15 minutes (GitHub cron granularity; runs may be delayed under load).
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: hn-radar
+  cancel-in-progress: false
+
+jobs:
+  radar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Run hn-radar
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          # ---- Your settings: edit these directly ----
+          HN_RADAR_INTERESTS: "AI,Python,3D"
+          HN_RADAR_POINTS_THRESHOLD: "100"
+          HN_RADAR_SECTIONS: "story,show_hn,ask_hn"
+          # ---- Optional ----
+          # HN_RADAR_MATCH_FIELDS: "title,url,story_text"
+          # HN_RADAR_POINTS_REQUIRE_INTEREST: "false"
+          HN_RADAR_LOOKBACK_HOURS: "24"
+        run: uv run hn-radar --state state/seen.json
+
+      - name: Persist state
+        run: |
+          if [[ -n "$(git status --porcelain state/seen.json)" ]]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add state/seen.json
+            git commit -m "chore: update hn-radar state [skip ci]"
+            git push
+          else
+            echo "No state changes."
+          fi
