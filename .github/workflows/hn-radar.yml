@@ -3,7 +3,7 @@ name: hn-radar
 on:
   schedule:
     # Every 15 minutes (GitHub cron granularity; runs may be delayed under load).
-    - cron: "*/15 * * * *"
+    - cron: "0 */3 * * *"
   workflow_dispatch: {}
 
 permissions:
