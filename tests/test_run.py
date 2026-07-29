@@ -105,3 +105,46 @@ def test_trending_ping_on_later_run_is_not_suppressed(tmp_path):
     hot = make_story(id="6", title="Rust project", points=150, created_at_i=now)
     new2, points2, combined2 = run(base_config(), FakeClient([hot]), RecordingNotifier(), state, now=now)
     assert len(new2) == 0 and len(points2) == 1 and len(combined2) == 0
+
+
+class FailingNotifier(RecordingNotifier):
+    """Records sends but raises after ``fail_after`` successful ones."""
+
+    def __init__(self, fail_after):
+        super().__init__()
+        self.fail_after = fail_after
+
+    def send(self, text):
+        if len(self.messages) >= self.fail_after:
+            raise RuntimeError("boom")
+        super().send(text)
+
+
+def test_cap_limits_alerts_per_run(tmp_path):
+    now = int(time.time())
+    stories = [make_story(id=str(i), title="Rust thing", points=5, created_at_i=now + i)
+               for i in range(10)]
+    state = State.load(str(tmp_path / "s.json"))
+    notifier = RecordingNotifier()
+    cfg = base_config(max_alerts_per_run=3)
+
+    new, _, _ = run(cfg, FakeClient(stories), notifier, state, now=now)
+    assert len(new) == 3
+    assert len(notifier.messages) == 3
+    # Un-sent stories are NOT marked, so a later run continues the backlog.
+    new2, _, _ = run(cfg, FakeClient(stories), RecordingNotifier(), state, now=now)
+    assert len(new2) == 3
+
+
+def test_failed_send_preserves_prior_progress(tmp_path):
+    now = int(time.time())
+    stories = [make_story(id=str(i), title="Rust thing", points=5, created_at_i=now - i)
+               for i in range(5)]
+    state = State.load(str(tmp_path / "s.json"))
+    notifier = FailingNotifier(fail_after=2)
+
+    new, _, _ = run(base_config(), FakeClient(stories), notifier, state, now=now)
+    # Two delivered before the failure; run stops without raising.
+    assert len(new) == 2
+    # Those two are marked seen; the failed/unsent ones remain for next run.
+    assert len(state.notified_new) == 2

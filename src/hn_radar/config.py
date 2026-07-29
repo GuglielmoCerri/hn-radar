@@ -24,6 +24,12 @@ def _env_int(value: Optional[str], default: int) -> int:
     return int(value)
 
 
+def _env_float(value: Optional[str], default: float) -> float:
+    if value is None or str(value).strip() == "":
+        return default
+    return float(value)
+
+
 def _env_bool(value: Optional[str], default: bool) -> bool:
     if value is None or str(value).strip() == "":
         return default
@@ -47,6 +53,8 @@ class Config:
     alert_new_matching: bool = True
     alert_points_threshold: bool = True
     points_require_interest: bool = False
+    max_alerts_per_run: int = 25
+    send_interval: float = 1.0
 
     @classmethod
     def from_env(cls, env: Optional[Mapping[str, str]] = None) -> "Config":
@@ -65,6 +73,8 @@ class Config:
         - HN_RADAR_ALERT_NEW_MATCHING   bool, default true
         - HN_RADAR_ALERT_POINTS         bool, default true
         - HN_RADAR_POINTS_REQUIRE_INTEREST  bool, default false
+        - HN_RADAR_MAX_ALERTS_PER_RUN   integer, default 25 (0 = unlimited)
+        - HN_RADAR_SEND_INTERVAL        float seconds between sends, default 1.0
         """
         env = os.environ if env is None else env
 
@@ -79,4 +89,6 @@ class Config:
             alert_new_matching=_env_bool(env.get("HN_RADAR_ALERT_NEW_MATCHING"), True),
             alert_points_threshold=_env_bool(env.get("HN_RADAR_ALERT_POINTS"), True),
             points_require_interest=_env_bool(env.get("HN_RADAR_POINTS_REQUIRE_INTEREST"), False),
+            max_alerts_per_run=_env_int(env.get("HN_RADAR_MAX_ALERTS_PER_RUN"), 25),
+            send_interval=_env_float(env.get("HN_RADAR_SEND_INTERVAL"), 1.0),
         )

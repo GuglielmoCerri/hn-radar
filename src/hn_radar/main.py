@@ -55,9 +55,19 @@ def run(config: Config, client: HNClient, notifier, state: State, now: int = Non
     points_alerts = []
     combined_alerts = []
 
-    for story in _gather_candidates(client, config, cutoff):
-        matched = matcher.match(story)
+    cap = config.max_alerts_per_run
+    sent = 0
 
+    # Newest first, so under a per-run cap the most recent posts go out first
+    # and any backlog trickles out over subsequent runs instead of flooding.
+    candidates = _gather_candidates(client, config, cutoff)
+    candidates.sort(key=lambda s: s.created_at_i, reverse=True)
+
+    for story in candidates:
+        if cap and sent >= cap:
+            break
+
+        matched = matcher.match(story)
         fires_new = (
             config.alert_new_matching and bool(matched) and not state.has_new(story.id)
         )
@@ -67,31 +77,35 @@ def run(config: Config, client: HNClient, notifier, state: State, now: int = Non
             and not state.has_points(story.id)
             and (not config.points_require_interest or bool(matched))
         )
+        if not (fires_new or fires_points):
+            continue
 
-        if fires_new:
-            state.add_new(story.id)
-        if fires_points:
-            state.add_points(story.id)
-
-        if fires_new and fires_points:
-            combined_alerts.append((story, matched))
-        else:
-            if fires_new:
+        # Send first; only mark as "seen" once delivery succeeds, so a failed
+        # send is retried on the next run instead of being silently dropped.
+        try:
+            if fires_new and fires_points:
+                notifier.send(format_combined(story, matched, config.points_threshold))
+                state.add_new(story.id)
+                state.add_points(story.id)
+                combined_alerts.append((story, matched))
+            elif fires_new:
+                notifier.send(format_new(story, matched))
+                state.add_new(story.id)
                 new_alerts.append((story, matched))
-            if fires_points:
+            else:
+                notifier.send(format_points(story, matched, config.points_threshold))
+                state.add_points(story.id)
                 points_alerts.append((story, matched))
-
-    for story, matched in new_alerts:
-        notifier.send(format_new(story, matched))
-    for story, matched in points_alerts:
-        notifier.send(format_points(story, matched, config.points_threshold))
-    for story, matched in combined_alerts:
-        notifier.send(format_combined(story, matched, config.points_threshold))
+            sent += 1
+        except Exception as exc:  # noqa: BLE001 - keep prior progress, stop this run
+            print(f"[hn-radar] send failed ({exc}); stopping this run, "
+                  "remaining posts will retry next run.", file=sys.stderr)
+            break
 
     return new_alerts, points_alerts, combined_alerts
 
 
-def build_notifier(dry_run: bool):
+def build_notifier(config: Config, dry_run: bool):
     token = os.environ.get("TELEGRAM_BOT_TOKEN")
     chat_id = os.environ.get("TELEGRAM_CHAT_ID")
     if dry_run or not (token and chat_id):
@@ -99,7 +113,7 @@ def build_notifier(dry_run: bool):
             print("[hn-radar] TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID not set; "
                   "falling back to console output.", file=sys.stderr)
         return ConsoleNotifier()
-    return TelegramNotifier(token, chat_id)
+    return TelegramNotifier(token, chat_id, min_interval=config.send_interval)
 
 
 def main(argv=None) -> int:
@@ -116,12 +130,16 @@ def main(argv=None) -> int:
 
     client = HNClient()
     state = State.load(args.state, cap=config.state_cap)
-    notifier = build_notifier(args.dry_run)
+    notifier = build_notifier(config, args.dry_run)
 
-    new_alerts, points_alerts, combined_alerts = run(config, client, notifier, state)
-
-    if not args.dry_run:
-        state.save()
+    new_alerts = points_alerts = combined_alerts = []
+    try:
+        new_alerts, points_alerts, combined_alerts = run(config, client, notifier, state)
+    finally:
+        # Persist whatever was successfully delivered, even if run() was
+        # interrupted, so we never re-send the same posts next time.
+        if not args.dry_run:
+            state.save()
 
     print(f"[hn-radar] sent {len(new_alerts)} new-post alert(s), "
           f"{len(points_alerts)} points alert(s), "

@@ -10,6 +10,8 @@ def test_defaults_when_no_env():
     assert cfg.alert_new_matching is True
     assert cfg.alert_points_threshold is True
     assert cfg.points_require_interest is False
+    assert cfg.max_alerts_per_run == 25
+    assert cfg.send_interval == 1.0
 
 
 def test_parses_interests_and_threshold():
