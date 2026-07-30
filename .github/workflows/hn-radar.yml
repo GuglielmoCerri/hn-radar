@@ -3,7 +3,7 @@ name: hn-radar
 on:
   schedule:
     # Every 15 minutes (GitHub cron granularity; runs may be delayed under load).
-    - cron: "0 */3 * * *"
+    - cron: "0 */12 * * *"
   workflow_dispatch: {}
 
 permissions:
@@ -32,12 +32,12 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           # ---- Your settings: edit these directly ----
-          HN_RADAR_INTERESTS: "AI,Python,3D"
-          HN_RADAR_POINTS_THRESHOLD: "20"
+          HN_RADAR_INTERESTS: ""
+          HN_RADAR_POINTS_THRESHOLD: "100"
           HN_RADAR_SECTIONS: "story,show_hn"
           # ---- Optional ----
           # HN_RADAR_MATCH_FIELDS: "title,url,story_text"
-          HN_RADAR_POINTS_REQUIRE_INTEREST: "true"
+          HN_RADAR_POINTS_REQUIRE_INTEREST: "false"
           HN_RADAR_LOOKBACK_HOURS: "24"
         run: uv run hn-radar --state state/seen.json
 
